@@ -4,20 +4,17 @@ Exposes an OpenAI-compatible REST API (and Web2API endpoints) that routes
 requests directly into your authenticated Firefox browser session via WebSocket.
 """
 
-import os
-import sys
-import time
-import json
-import uuid
 import asyncio
-from typing import Dict, List, Any, Optional
+import json
+import os
+import time
+import uuid
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Request
-from fastapi.responses import JSONResponse, StreamingResponse
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
 import uvicorn
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
 app = FastAPI(
     title="Web2API Firefox Bridge Server",
@@ -34,10 +31,12 @@ app.add_middleware(
 )
 
 # Global Bridge Connection Hub
+
+
 class ExtensionBridgeHub:
     def __init__(self):
-        self.active_socket: Optional[WebSocket] = None
-        self.pending_requests: Dict[str, asyncio.Future] = {}
+        self.active_socket: WebSocket | None = None
+        self.pending_requests: dict[str, asyncio.Future] = {}
         self.lock = asyncio.Lock()
         self.stats = {
             "total_requests": 0,
@@ -71,8 +70,7 @@ class ExtensionBridgeHub:
         if not self.is_connected:
             raise HTTPException(
                 status_code=503,
-                detail="Firefox Extension is not connected. Please open Firefox and ensure the Web2API Pro extension is active."
-            )
+                detail="Firefox Extension is not connected. Please open Firefox and ensure the Web2API Pro extension is active.")
 
         req_id = f"req-{uuid.uuid4().hex[:12]}"
         loop = asyncio.get_running_loop()
@@ -98,7 +96,7 @@ class ExtensionBridgeHub:
         except asyncio.TimeoutError:
             self.stats["failed_requests"] += 1
             raise HTTPException(status_code=504, detail=f"Request to Firefox chat session timed out after {timeout} seconds.")
-        except Exception as e:
+        except Exception:
             self.stats["failed_requests"] += 1
             raise
         finally:
@@ -118,7 +116,7 @@ class ExtensionBridgeHub:
         finally:
             self.pending_requests.pop(req_id, None)
 
-    def resolve_response(self, req_id: str, data: dict, error: Optional[str] = None):
+    def resolve_response(self, req_id: str, data: dict, error: str | None = None):
         future = self.pending_requests.get(req_id)
         if not future or future.done():
             return
@@ -128,9 +126,12 @@ class ExtensionBridgeHub:
         else:
             future.set_result(data)
 
+
 hub = ExtensionBridgeHub()
 
 # WebSocket Endpoint for Firefox Extension
+
+
 @app.websocket("/ws")
 async def websocket_bridge(websocket: WebSocket):
     await websocket.accept()
@@ -161,23 +162,29 @@ async def websocket_bridge(websocket: WebSocket):
         hub.disconnect()
 
 # Pydantic Schemas
+
+
 class MessageItem(BaseModel):
     role: str
     content: str
 
+
 class OpenAIChatRequest(BaseModel):
     model: str = "gemini-pro"
-    messages: List[MessageItem]
-    temperature: Optional[float] = 0.7
-    stream: Optional[bool] = False
-    max_tokens: Optional[int] = None
+    messages: list[MessageItem]
+    temperature: float | None = 0.7
+    stream: bool | None = False
+    max_tokens: int | None = None
+
 
 class Web2ApiRequest(BaseModel):
     prompt: str
-    model: Optional[str] = "gemini-pro"
-    timeout: Optional[float] = 120.0
+    model: str | None = "gemini-pro"
+    timeout: float | None = 120.0
 
 # REST Endpoints
+
+
 @app.get("/health")
 @app.get("/status")
 async def get_status():
@@ -188,6 +195,7 @@ async def get_status():
         "stats": hub.stats,
         "timestamp": datetime.now().isoformat()
     }
+
 
 @app.get("/v1/models")
 async def list_models():
@@ -200,6 +208,7 @@ async def list_models():
             {"id": "gemini-pro-web", "object": "model", "owned_by": "web2api", "permission": []}
         ]
     }
+
 
 @app.post("/v1/chat/completions")
 async def openai_chat_completions(req: OpenAIChatRequest):
@@ -253,6 +262,7 @@ async def openai_chat_completions(req: OpenAIChatRequest):
         "latency_seconds": round(elapsed, 2)
     }
 
+
 @app.post("/api/chat")
 async def web2api_chat(req: Web2ApiRequest):
     """
@@ -274,6 +284,7 @@ async def web2api_chat(req: Web2ApiRequest):
         "latency_seconds": round(elapsed, 2),
         "status": "success"
     }
+
 
 @app.post("/api/reset")
 async def reset_conversation():

@@ -2,16 +2,15 @@
 # This module exposes the HTTP API that wraps the automated Gemini browser session.
 # It handles routing, request/response validation, diagnostic logging, and startup/shutdown of the browser.
 
-import os
-import sys
-import time
 import asyncio
-from datetime import datetime
+import os
+import time
 from contextlib import asynccontextmanager
-from typing import Dict, List, Any
+from datetime import datetime
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 
@@ -31,11 +30,12 @@ HEADLESS = os.getenv("HEADLESS", "true").lower() in ("true", "1", "yes")
 manager = GeminiSessionManager(session_dir=SESSION_DIR, headless=HEADLESS)
 
 # Global variables for diagnostics
-request_logs: List[Dict[str, Any]] = []
+request_logs: list[dict[str, Any]] = []
 log_id_counter = 1
 total_requests = 0
 total_success = 0
 total_latency = 0.0
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -54,6 +54,7 @@ async def lifespan(app: FastAPI):
     print("[INFO] Stopping browser session manager on shutdown...")
     await manager.stop()
 
+
 async def start_browser_background():
     # Helper: start the browser without blocking; logs failures on error
     try:
@@ -71,9 +72,12 @@ app = FastAPI(
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 # Pydantic schemas - define the shape of API request/response bodies
+
+
 class ChatRequest(BaseModel):
     prompt: str = Field(..., min_length=1, description="The prompt query to send to Gemini")
     timeout_sec: int = Field(90, ge=10, le=180, description="Max seconds to wait for generation")
+
 
 class ChatResponse(BaseModel):
     response: str
@@ -81,15 +85,17 @@ class ChatResponse(BaseModel):
     status: str
 
 # Helper to add a diagnostics log entry (newest first, capped at 50)
+
+
 def add_log(prompt: str, response: str, latency_ms: float, status_str: str):
     global log_id_counter, total_requests, total_success, total_latency
-    
+
     total_requests += 1
     # Only successful calls count toward latency averages
     if status_str == "Success":
         total_success += 1
         total_latency += latency_ms
-        
+
     # Build a concise log entry with truncated prompt/response snippets
     log_entry = {
         "id": log_id_counter,
@@ -101,18 +107,22 @@ def add_log(prompt: str, response: str, latency_ms: float, status_str: str):
     }
     request_logs.insert(0, log_entry)
     log_id_counter += 1
-    
+
     # Keep log history capped at 50 elements
     if len(request_logs) > 50:
         request_logs.pop()
 
 # Server Dashboard HTML route
+
+
 @app.get("/", response_class=HTMLResponse)
 async def read_dashboard(request: Request):
     # Render the Jinja2 admin dashboard template
     return templates.TemplateResponse("index.html", {"request": request})
 
 # Active Chat API Endpoint
+
+
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat_endpoint(payload: ChatRequest):
     # Reject the request if the browser session isn't ready
@@ -128,7 +138,7 @@ async def chat_endpoint(payload: ChatRequest):
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail=f"Browser is not connected. Current status: {manager.status}. Error: {manager.last_error}"
             )
-            
+
     start_time = time.time()
     try:
         # Delegate to the browser automation engine
@@ -138,7 +148,7 @@ async def chat_endpoint(payload: ChatRequest):
         )
         elapsed_ms = (time.time() - start_time) * 1000
         add_log(payload.prompt, response_text, elapsed_ms, "Success")
-        
+
         return ChatResponse(
             response=response_text,
             latency_ms=elapsed_ms,
@@ -158,10 +168,12 @@ async def chat_endpoint(payload: ChatRequest):
         add_log(payload.prompt, str(e), elapsed_ms, "System Error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process chat prompt: {str(e)}"
+            detail=f"Failed to process chat prompt: {e!s}"
         )
 
 # Get Session Status
+
+
 @app.get("/api/status")
 async def get_status():
     # Report system health, session state, and usage stats for the dashboard
@@ -169,7 +181,7 @@ async def get_status():
     avg_latency = 0.0
     if total_success > 0:
         avg_latency = round(total_latency / total_success, 2)
-        
+
     return {
         "status": manager.status,
         "is_connected": manager.is_connected,
@@ -183,6 +195,8 @@ async def get_status():
     }
 
 # Get Current browser Screenshot
+
+
 @app.get("/api/screenshot")
 async def get_screenshot():
     # Capture the live browser page as a base64 PNG for the "Live Headless View"
@@ -190,12 +204,16 @@ async def get_screenshot():
     return {"screenshot": screenshot_b64}
 
 # Get diagnostic request logs
+
+
 @app.get("/api/logs")
 async def get_logs():
     # Return the in-memory request log list for the dashboard table
     return request_logs
 
 # Quick recovery reboot endpoint
+
+
 @app.post("/api/reconnect")
 async def reconnect_browser():
     # Stop and restart the browser session without blocking the response
@@ -211,6 +229,8 @@ async def reconnect_browser():
         )
 
 # Reset Conversation Thread Endpoint
+
+
 @app.post("/api/chat/reset")
 async def reset_chat():
     # Start a fresh conversation in the persistent Gemini thread
@@ -229,6 +249,8 @@ async def reset_chat():
         )
 
 # Streaming Chat Endpoint (Server-Sent Events / Chunked)
+
+
 @app.post("/api/chat/stream")
 async def chat_stream_endpoint(payload: ChatRequest):
     # Same as /api/chat but yields response deltas as SSE events for real-time streaming
@@ -252,7 +274,7 @@ async def chat_stream_endpoint(payload: ChatRequest):
         except Exception as e:
             elapsed_ms = (time.time() - start_time) * 1000
             add_log(payload.prompt, str(e), elapsed_ms, "System Error")
-            yield f"data: [ERROR: {str(e)}]\n\n"
+            yield f"data: [ERROR: {e!s}]\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
