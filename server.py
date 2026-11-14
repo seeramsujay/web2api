@@ -13,7 +13,6 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
-
 from session_manager import GeminiSessionManager, SessionUnauthenticatedException
 
 # Resolve pathing
@@ -62,11 +61,12 @@ async def start_browser_background():
     except Exception as e:
         print(f"[ERROR] Failed to start browser in background: {e}")
 
+
 app = FastAPI(
     title="Gemini Web2API Server",
     description="A local API wrapper around the Gemini Web Chat Interface",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
@@ -75,14 +75,19 @@ templates = Jinja2Templates(directory=TEMPLATES_DIR)
 
 
 class ChatRequest(BaseModel):
-    prompt: str = Field(..., min_length=1, description="The prompt query to send to Gemini")
-    timeout_sec: int = Field(90, ge=10, le=180, description="Max seconds to wait for generation")
+    prompt: str = Field(
+        ..., min_length=1, description="The prompt query to send to Gemini"
+    )
+    timeout_sec: int = Field(
+        90, ge=10, le=180, description="Max seconds to wait for generation"
+    )
 
 
 class ChatResponse(BaseModel):
     response: str
     latency_ms: float
     status: str
+
 
 # Helper to add a diagnostics log entry (newest first, capped at 50)
 
@@ -103,7 +108,7 @@ def add_log(prompt: str, response: str, latency_ms: float, status_str: str):
         "prompt": prompt[:80] + "..." if len(prompt) > 80 else prompt,
         "response": response[:120] + "..." if len(response) > 120 else response,
         "latency_ms": round(latency_ms, 2),
-        "status": status_str
+        "status": status_str,
     }
     request_logs.insert(0, log_entry)
     log_id_counter += 1
@@ -112,6 +117,7 @@ def add_log(prompt: str, response: str, latency_ms: float, status_str: str):
     if len(request_logs) > 50:
         request_logs.pop()
 
+
 # Server Dashboard HTML route
 
 
@@ -119,6 +125,7 @@ def add_log(prompt: str, response: str, latency_ms: float, status_str: str):
 async def read_dashboard(request: Request):
     # Render the Jinja2 admin dashboard template
     return templates.TemplateResponse("index.html", {"request": request})
+
 
 # Active Chat API Endpoint
 
@@ -131,45 +138,40 @@ async def chat_endpoint(payload: ChatRequest):
         if manager.status == "Awaiting Authentication":
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Server is not authenticated. Please run './start.sh auth' to log in manually."
+                detail="Server is not authenticated. Please run './start.sh auth' to log in manually.",
             )
         else:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Browser is not connected. Current status: {manager.status}. Error: {manager.last_error}"
+                detail=f"Browser is not connected. Current status: {manager.status}. Error: {manager.last_error}",
             )
 
     start_time = time.time()
     try:
         # Delegate to the browser automation engine
         response_text = await manager.send_prompt(
-            prompt_text=payload.prompt,
-            timeout_sec=payload.timeout_sec
+            prompt_text=payload.prompt, timeout_sec=payload.timeout_sec
         )
         elapsed_ms = (time.time() - start_time) * 1000
         add_log(payload.prompt, response_text, elapsed_ms, "Success")
 
         return ChatResponse(
-            response=response_text,
-            latency_ms=elapsed_ms,
-            status="Success"
+            response=response_text, latency_ms=elapsed_ms, status="Success"
         )
     except SessionUnauthenticatedException as e:
         # Session was lost during the request (e.g. redirected to login)
         elapsed_ms = (time.time() - start_time) * 1000
         add_log(payload.prompt, str(e), elapsed_ms, "Authentication Error")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
     except Exception as e:
         # Any other failure: timeout, browser error, DOM mismatch, etc.
         elapsed_ms = (time.time() - start_time) * 1000
         add_log(payload.prompt, str(e), elapsed_ms, "System Error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process chat prompt: {e!s}"
+            detail=f"Failed to process chat prompt: {e!s}",
         )
+
 
 # Get Session Status
 
@@ -188,11 +190,16 @@ async def get_status():
         "session_exists": session_exists,
         "headless": manager.headless,
         "last_error": manager.last_error,
-        "last_activity": manager.last_activity.strftime("%Y-%m-%d %H:%M:%S") if manager.last_activity else "None",
+        "last_activity": (
+            manager.last_activity.strftime("%Y-%m-%d %H:%M:%S")
+            if manager.last_activity
+            else "None"
+        ),
         "total_requests": total_requests,
         "total_success": total_success,
-        "avg_latency_ms": avg_latency
+        "avg_latency_ms": avg_latency,
     }
+
 
 # Get Current browser Screenshot
 
@@ -203,6 +210,7 @@ async def get_screenshot():
     screenshot_b64 = await manager.take_screenshot_base64()
     return {"screenshot": screenshot_b64}
 
+
 # Get diagnostic request logs
 
 
@@ -210,6 +218,7 @@ async def get_screenshot():
 async def get_logs():
     # Return the in-memory request log list for the dashboard table
     return request_logs
+
 
 # Quick recovery reboot endpoint
 
@@ -225,8 +234,9 @@ async def reconnect_browser():
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to trigger reconnect: {e}"
+            detail=f"Failed to trigger reconnect: {e}",
         )
+
 
 # Reset Conversation Thread Endpoint
 
@@ -237,7 +247,7 @@ async def reset_chat():
     if not manager.is_connected:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Browser session is not connected."
+            detail="Browser session is not connected.",
         )
     try:
         await manager.new_chat()
@@ -245,8 +255,9 @@ async def reset_chat():
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to reset conversation thread: {e}"
+            detail=f"Failed to reset conversation thread: {e}",
         )
+
 
 # Streaming Chat Endpoint (Server-Sent Events / Chunked)
 
@@ -257,7 +268,7 @@ async def chat_stream_endpoint(payload: ChatRequest):
     if not manager.is_connected:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Browser session is not connected."
+            detail="Browser session is not connected.",
         )
 
     async def event_generator():
@@ -265,7 +276,9 @@ async def chat_stream_endpoint(payload: ChatRequest):
         full_text = ""
         try:
             # Yield each text delta as an SSE "data:" event
-            async for chunk in manager.send_prompt_stream(payload.prompt, payload.timeout_sec):
+            async for chunk in manager.send_prompt_stream(
+                payload.prompt, payload.timeout_sec
+            ):
                 full_text += chunk
                 yield f"data: {chunk}\n\n"
             elapsed_ms = (time.time() - start_time) * 1000
@@ -281,5 +294,6 @@ async def chat_stream_endpoint(payload: ChatRequest):
 
 if __name__ == "__main__":
     import uvicorn
+
     print(f"Starting Web2API Server on http://{HOST}:{PORT}...")
     uvicorn.run("server:app", host=HOST, port=PORT, reload=False)

@@ -2,9 +2,8 @@
 
 import unittest
 
-from fastapi.testclient import TestClient
-
 from bridge_server import MessageItem, OpenAIChatRequest, Web2ApiRequest, app
+from fastapi.testclient import TestClient
 
 
 class TestBridgeServer(unittest.TestCase):
@@ -39,7 +38,7 @@ class TestBridgeServer(unittest.TestCase):
     def test_chat_completions_no_extension(self):
         payload = {
             "model": "gemini-pro",
-            "messages": [{"role": "user", "content": "Hello world"}]
+            "messages": [{"role": "user", "content": "Hello world"}],
         }
         resp = self.client.post("/v1/chat/completions", json=payload)
         self.assertEqual(resp.status_code, 503)
@@ -64,11 +63,7 @@ class TestBridgeServer(unittest.TestCase):
         self.assertEqual(msg.role, "user")
         self.assertEqual(msg.content, "Ping")
 
-        req = OpenAIChatRequest(
-            messages=[msg],
-            model="gemini-1.5-pro",
-            stream=False
-        )
+        req = OpenAIChatRequest(messages=[msg], model="gemini-1.5-pro", stream=False)
         self.assertEqual(req.model, "gemini-1.5-pro")
         self.assertFalse(req.stream)
 

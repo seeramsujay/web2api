@@ -17,12 +17,16 @@ class SessionUnauthenticatedException(Exception):
 
 class GeminiSessionManager:
     def __init__(self, session_dir: str, headless: bool = True):
-        self.session_dir = session_dir  # Persistent Chromium profile (cookies/localStorage)
+        self.session_dir = (
+            session_dir  # Persistent Chromium profile (cookies/localStorage)
+        )
         self.headless = headless
         self.playwright = None
         self.context = None
         self.page = None
-        self.lock = asyncio.Lock()  # Serializes all browser interactions (one request at a time)
+        self.lock = (
+            asyncio.Lock()
+        )  # Serializes all browser interactions (one request at a time)
         self.status = "Disconnected"
         self.is_connected = False
         self.last_error = None
@@ -31,8 +35,15 @@ class GeminiSessionManager:
         # CSS selectors that match Gemini's web UI DOM
         self.INPUT_SELECTOR = 'div[contenteditable="true"]'
         self.SEND_BUTTON_SELECTOR = 'button[aria-label*="Send" i], button[aria-label*="send" i], button:has-text("Send"), button.send-button'
-        self.STOP_BUTTON_SELECTOR = 'button[aria-label*="Stop" i], button[aria-label*="stop" i]'
-        self.MESSAGE_SELECTORS = ['message-content', '[class*="message-content"]', '.message-content', 'article']
+        self.STOP_BUTTON_SELECTOR = (
+            'button[aria-label*="Stop" i], button[aria-label*="stop" i]'
+        )
+        self.MESSAGE_SELECTORS = [
+            "message-content",
+            '[class*="message-content"]',
+            ".message-content",
+            "article",
+        ]
         self.NEW_CHAT_SELECTOR = 'a[href*="/app"], button[aria-label*="New chat" i], button[aria-label*="Reset" i], [data-test-id="new-chat-button"]'
 
     async def start(self):
@@ -49,8 +60,8 @@ class GeminiSessionManager:
                 args=[
                     "--disable-blink-features=AutomationControlled",
                     "--no-sandbox",
-                    "--disable-dev-shm-usage"
-                ]
+                    "--disable-dev-shm-usage",
+                ],
             )
 
             # Use an existing page or create a new one
@@ -72,7 +83,9 @@ class GeminiSessionManager:
             self.is_connected = True
             self.status = "Connected & Ready"
             self.last_activity = datetime.now()
-            print("[INFO] Playwright browser session started and verified successfully.")
+            print(
+                "[INFO] Playwright browser session started and verified successfully."
+            )
 
         except SessionUnauthenticatedException as e:
             # Not logged in - report and let the server surface this to the user
@@ -218,7 +231,9 @@ class GeminiSessionManager:
             check_interval = 0.5  # check every 500ms
             max_checks = int(timeout_sec / check_interval)
 
-            print("[INFO] Streaming response detected. Waiting for text stabilization...")
+            print(
+                "[INFO] Streaming response detected. Waiting for text stabilization..."
+            )
 
             for i in range(max_checks):
                 # Retrieve current text
@@ -245,7 +260,9 @@ class GeminiSessionManager:
 
                 await asyncio.sleep(check_interval)
             else:
-                print("[WARNING] Response did not stabilize within timeout. Returning partial response.")
+                print(
+                    "[WARNING] Response did not stabilize within timeout. Returning partial response."
+                )
 
             self.status = "Connected & Ready"
             return last_text
@@ -342,7 +359,7 @@ class GeminiSessionManager:
 
                 # If text grew, yield the newly appended portion (delta)
                 if len(current_text) > len(last_text):
-                    delta = current_text[len(last_text):]
+                    delta = current_text[len(last_text) :]
                     yield delta
                     stable_count = 0
                 elif len(current_text) > 0 and current_text == last_text:
@@ -366,7 +383,7 @@ class GeminiSessionManager:
             return ""
         try:
             screenshot_bytes = await self.page.screenshot(type="png")
-            return base64.b64encode(screenshot_bytes).decode('utf-8')
+            return base64.b64encode(screenshot_bytes).decode("utf-8")
         except Exception as e:
             print(f"[WARNING] Failed to capture screenshot: {e}")
             return ""
